@@ -1,20 +1,20 @@
-
 import { GoogleGenAI, GenerateContentResponse, Type } from '@google/genai';
 import type { Stock, Sector, AlphaAdvice, SentimentResult, GroundingChunk, NewsArticle } from '../types';
 
-// FIX: As per @google/genai coding guidelines, the API key must be obtained from process.env.API_KEY.
-// This also resolves the TypeScript error "Property 'env' does not exist on type 'ImportMeta'".
-const API_KEY = process.env.API_KEY;
-
-if (!API_KEY) {
-  // FIX: Updated warning message to reflect the correct environment variable.
-  console.warn("Gemini API Key not found. AI features will be disabled. Set API_KEY in your environment.");
+// CORRECT: Use `import.meta.env.VITE_API_KEY` for client-side Vite applications.
+// `process.env` is for Node.js environments and does not exist in the browser.
+// FIX: Per Gemini API guidelines, use `process.env.API_KEY` for API key management.
+// This also resolves the TypeScript error related to `import.meta.env`.
+if (!process.env.API_KEY) {
+  console.warn("Gemini API Key not found. AI features will be disabled. Set VITE_API_KEY in your Vercel deployment environment variables.");
 }
 
-const ai = new GoogleGenAI({ apiKey: API_KEY });
+// Initialize with the key, even if it's undefined. The functions below will handle the case.
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export const getAlphaAdvice = async (topGainers: Stock[], topLosers: Stock[], sectors: Sector[]): Promise<AlphaAdvice | string> => {
-    if (!API_KEY) return "API Key not configured. Cannot generate advice.";
+    // FIX: Per Gemini API guidelines, check for `process.env.API_KEY`.
+    if (!process.env.API_KEY) return "API Key not configured. Cannot generate advice.";
     
     const prompt = `
         You are Arthasutra, a world-class Indian equity strategist. Your advice is sharp, data-driven, and adheres to strict risk management.
@@ -68,7 +68,6 @@ export const getAlphaAdvice = async (topGainers: Stock[], topLosers: Stock[], se
             }
         });
 
-        // FIX: Added optional chaining and a check for `response.text` to prevent runtime errors on undefined or empty responses.
         const text = response.text?.trim();
         if (!text) {
             throw new Error("Received empty JSON response from Gemini for Alpha Advice.");
@@ -81,7 +80,8 @@ export const getAlphaAdvice = async (topGainers: Stock[], topLosers: Stock[], se
 };
 
 export const getStockSentiment = async (stock: Stock): Promise<SentimentResult | string> => {
-    if (!API_KEY) return "Sentiment analysis unavailable.";
+    // FIX: Per Gemini API guidelines, check for `process.env.API_KEY`.
+    if (!process.env.API_KEY) return "Sentiment analysis unavailable.";
 
     const prompt = `
         Analyze the latest real-time news and financial data for the Indian stock: ${stock.name} (${stock.ticker}).
@@ -109,7 +109,6 @@ export const getStockSentiment = async (stock: Stock): Promise<SentimentResult |
             },
         });
         
-        // FIX: Added trim() for robust JSON parsing and optional chaining/check for `response.text` to prevent runtime errors.
         const text = response.text?.trim();
         if (!text) {
             throw new Error("Received empty JSON response from Gemini for stock sentiment.");
@@ -134,7 +133,8 @@ export const getStockSentiment = async (stock: Stock): Promise<SentimentResult |
 };
 
 export const getNewsForStock = async (stock: Stock): Promise<NewsArticle[] | string> => {
-    if (!API_KEY) return "News feed unavailable.";
+    // FIX: Per Gemini API guidelines, check for `process.env.API_KEY`.
+    if (!process.env.API_KEY) return "News feed unavailable.";
 
     const prompt = `
         Fetch the 5 most recent and relevant financial news headlines for the Indian stock: ${stock.name} (${stock.ticker}).
@@ -163,7 +163,6 @@ export const getNewsForStock = async (stock: Stock): Promise<NewsArticle[] | str
                 }
             },
         });
-        // FIX: Added trim() for robust JSON parsing and optional chaining/check for `response.text` to prevent runtime errors.
         const text = response.text?.trim();
         if (!text) {
             throw new Error("Received empty JSON response from Gemini for news.");
