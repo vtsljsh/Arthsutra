@@ -1,19 +1,17 @@
+
 import { GoogleGenAI, GenerateContentResponse, Type } from '@google/genai';
 import type { Stock, Sector, AlphaAdvice, SentimentResult, GroundingChunk, NewsArticle } from '../types';
 
-// CORRECT: Use `import.meta.env.VITE_API_KEY` for client-side Vite applications.
-// `process.env` is for Node.js environments and does not exist in the browser.
-// FIX: Per Gemini API guidelines, use `process.env.API_KEY` for API key management.
-// This also resolves the TypeScript error related to `import.meta.env`.
-if (!process.env.API_KEY) {
-  console.warn("Gemini API Key not found. AI features will be disabled. Set VITE_API_KEY in your Vercel deployment environment variables.");
-}
-
-// Initialize with the key, even if it's undefined. The functions below will handle the case.
+// FIX: Per coding guidelines, API key must be from process.env.API_KEY and used directly in initialization.
+// The original code used `import.meta.env.VITE_API_KEY` which is not compliant with the guidelines
+// and caused a TypeScript error (`Property 'env' does not exist on type 'ImportMeta'`).
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
+if (!process.env.API_KEY) {
+  console.warn("Gemini API Key not found. AI features will be disabled. Set API_KEY in your environment variables.");
+}
+
 export const getAlphaAdvice = async (topGainers: Stock[], topLosers: Stock[], sectors: Sector[]): Promise<AlphaAdvice | string> => {
-    // FIX: Per Gemini API guidelines, check for `process.env.API_KEY`.
     if (!process.env.API_KEY) return "API Key not configured. Cannot generate advice.";
     
     const prompt = `
@@ -80,7 +78,6 @@ export const getAlphaAdvice = async (topGainers: Stock[], topLosers: Stock[], se
 };
 
 export const getStockSentiment = async (stock: Stock): Promise<SentimentResult | string> => {
-    // FIX: Per Gemini API guidelines, check for `process.env.API_KEY`.
     if (!process.env.API_KEY) return "Sentiment analysis unavailable.";
 
     const prompt = `
@@ -133,7 +130,6 @@ export const getStockSentiment = async (stock: Stock): Promise<SentimentResult |
 };
 
 export const getNewsForStock = async (stock: Stock): Promise<NewsArticle[] | string> => {
-    // FIX: Per Gemini API guidelines, check for `process.env.API_KEY`.
     if (!process.env.API_KEY) return "News feed unavailable.";
 
     const prompt = `
