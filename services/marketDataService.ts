@@ -82,6 +82,28 @@ export const getPreMarketData = (): PreMarketData[] => [
     },
 ];
 
+// Simulate fetching historical data with a random walk to make it look realistic
+export const getHistoricalData = (ticker: string, days: number): { time: string; value: number }[] => {
+    const data: { time: string; value: number }[] = [];
+    const today = new Date();
+    // Start with a plausible price in the past, accounting for general market trend
+    let price = (Math.random() * 2000 + 500) / Math.pow(1.0005, days); 
+
+    for (let i = days; i > 0; i--) {
+        const date = new Date(today);
+        date.setDate(date.getDate() - i);
+        data.push({
+            time: date.toISOString().split('T')[0],
+            value: parseFloat(price.toFixed(2)),
+        });
+        // Apply daily volatility and a slight upward drift
+        const volatility = Math.random() * 0.04 - 0.015; // Random daily change between -1.5% and 2.5%
+        price *= (1 + volatility + 0.0005); // Add a small drift to simulate growth
+    }
+    return data;
+};
+
+
 export const searchStocks = (query: string): Stock[] => {
     if (!query) return [];
     const upperQuery = query.toUpperCase();

@@ -64,5 +64,12 @@ export interface GroundingChunk {
 
 export interface SentimentResult {
     sentiment: string;
+    score: number; // Score from -1 (bearish) to 1 (bullish)
     sources: GroundingChunk[];
+}
+
+export interface NewsArticle {
+    title: string;
+    url: string;
+    source: string;
 }

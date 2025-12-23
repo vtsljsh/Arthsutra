@@ -1,9 +1,12 @@
 
 import React, { useState, useEffect } from 'react';
-import type { Stock, SentimentResult } from '../types';
-import { getStockSentiment } from '../services/geminiService';
+import type { Stock, SentimentResult, NewsArticle } from '../types';
+import { getStockSentiment, getNewsForStock } from '../services/geminiService';
+import { getHistoricalData } from '../services/marketDataService';
 import GlassCard from './GlassCard';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import HistoricalChart from './HistoricalChart';
+import SentimentGauge from './SentimentGauge';
+import NewsSection from './NewsSection';
 
 interface StockDetailProps {
     stock: Stock;
@@ -12,69 +15,53 @@ interface StockDetailProps {
 
 const StockDetail: React.FC<StockDetailProps> = ({ stock, onBack }) => {
     const [sentimentResult, setSentimentResult] = useState<SentimentResult | null>(null);
-    const [isLoadingSentiment, setIsLoadingSentiment] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const [news, setNews] = useState<NewsArticle[]>([]);
+    const [historicalData, setHistoricalData] = useState<{ time: string; value: number }[]>([]);
+    const [timeRange, setTimeRange] = useState<'1Y' | '5Y'>('1Y');
+
+    const [isLoading, setIsLoading] = useState(true);
+    const [sentimentError, setSentimentError] = useState<string | null>(null);
+    const [newsError, setNewsError] = useState<string | null>(null);
 
     useEffect(() => {
-        const fetchSentiment = async () => {
-            setIsLoadingSentiment(true);
-            setError(null);
-            const result = await getStockSentiment(stock);
-            if (typeof result === 'string') {
-                setError(result);
+        const fetchAllData = async () => {
+            setIsLoading(true);
+            
+            const days = timeRange === '1Y' ? 365 : 365 * 5;
+            setHistoricalData(getHistoricalData(stock.ticker, days));
+
+            const [sentimentRes, newsRes] = await Promise.all([
+                getStockSentiment(stock),
+                getNewsForStock(stock)
+            ]);
+
+            if (typeof sentimentRes === 'string') {
+                setSentimentError(sentimentRes);
             } else {
-                setSentimentResult(result);
+                setSentimentResult(sentimentRes);
             }
-            setIsLoadingSentiment(false);
+
+            if (typeof newsRes === 'string') {
+                setNewsError(newsRes);
+            } else {
+                setNews(newsRes);
+            }
+
+            setIsLoading(false);
         };
-        fetchSentiment();
-    }, [stock]);
-
-    const peData = [
-        { name: stock.ticker, value: stock.peRatio, color: '#6ee7b7' },
-        { name: 'Industry Avg.', value: stock.industryPeRatio, color: '#4b5563' },
-    ];
-
-    const renderSentiment = () => {
-        if (isLoadingSentiment) return <p className="text-gray-400">Analyzing real-time sentiment...</p>;
-        if (error) return <p className="text-red-400">{error}</p>;
-        if (!sentimentResult) return <p className="text-gray-400">No sentiment data available.</p>;
-
-        return (
-            <div>
-                <p className="text-gray-300">{sentimentResult.sentiment}</p>
-                {sentimentResult.sources && sentimentResult.sources.length > 0 && (
-                    <div className="mt-3 pt-3 border-t border-glass-border">
-                        <h4 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">Sources</h4>
-                        <ul className="space-y-1">
-                            {sentimentResult.sources.map((source, index) => (
-                                <li key={index} className="truncate">
-                                    <a
-                                        href={source.web.uri}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="text-xs text-blue-400 hover:text-electric-mint hover:underline transition-colors"
-                                    >
-                                        {source.web.title}
-                                    </a>
-                                </li>
-                            ))}
-                        </ul>
-                    </div>
-                )}
-            </div>
-        );
-    };
-
+        fetchAllData();
+    }, [stock, timeRange]);
+    
     return (
-        <GlassCard className="p-6">
-            <button onClick={onBack} className="mb-4 text-electric-mint hover:underline">&larr; Back to Dashboard</button>
+        <GlassCard className="p-4 sm:p-6">
+            <button onClick={onBack} className="mb-4 text-electric-mint hover:underline text-sm">&larr; Back to Dashboard</button>
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4">
                 <div>
-                    <h2 className="text-3xl font-bold font-readex text-white">{stock.name} ({stock.ticker})</h2>
+                    <h2 className="text-2xl sm:text-3xl font-bold font-readex text-white">{stock.name} ({stock.ticker})</h2>
+                    <p className="text-sm text-gray-400">{stock.sector} Sector</p>
                 </div>
                 <div className="text-right mt-4 md:mt-0">
-                    <p className={`text-4xl font-bold ${stock.change >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    <p className={`text-3xl sm:text-4xl font-bold ${stock.change >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                         ₹{stock.ltp.toFixed(2)}
                     </p>
                     <p className={`font-semibold ${stock.change >= 0 ? 'text-green-400' : 'text-red-400'}`}>
@@ -82,36 +69,30 @@ const StockDetail: React.FC<StockDetailProps> = ({ stock, onBack }) => {
                     </p>
                 </div>
             </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
-                <div className="bg-deep-indigo/50 p-4 rounded-lg col-span-1 md:col-span-2">
-                    <h3 className="text-electric-mint font-semibold mb-2">Real-Time Sentiment</h3>
-                    {renderSentiment()}
-                </div>
-                <div className="bg-deep-indigo/50 p-4 rounded-lg">
-                    <h3 className="text-electric-mint font-semibold mb-2">Key Metrics</h3>
-                    <div className="grid grid-cols-2 gap-2 text-sm">
-                        <p className="text-gray-400">Market Cap:</p><p className="font-semibold">₹{stock.marketCap} L Cr</p>
-                        <p className="text-gray-400">Volume:</p><p className="font-semibold">{stock.volume.toLocaleString('en-IN')}</p>
-                        <p className="text-gray-400">Sector:</p><p className="font-semibold">{stock.sector}</p>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
+                {/* Main Content: Chart */}
+                <div className="lg:col-span-2 bg-deep-indigo/50 p-4 rounded-lg">
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-electric-mint font-semibold">Historical Performance</h3>
+                        <div className="flex space-x-1 bg-gray-700/50 p-1 rounded-lg">
+                            <button onClick={() => setTimeRange('1Y')} className={`px-3 py-1 text-xs font-bold rounded-md ${timeRange === '1Y' ? 'bg-electric-mint text-deep-indigo' : 'text-gray-300'}`}>1Y</button>
+                            <button onClick={() => setTimeRange('5Y')} className={`px-3 py-1 text-xs font-bold rounded-md ${timeRange === '5Y' ? 'bg-electric-mint text-deep-indigo' : 'text-gray-300'}`}>5Y</button>
+                        </div>
                     </div>
+                    <HistoricalChart data={historicalData} />
                 </div>
-                 <div className="bg-deep-indigo/50 p-4 rounded-lg col-span-1 md:col-span-2 lg:col-span-3">
-                    <h3 className="text-electric-mint font-semibold mb-2">P/E Ratio vs. Industry</h3>
-                     <div className="h-32">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={peData} layout="vertical" margin={{ top: 5, right: 20, left: 20, bottom: 5 }}>
-                                <XAxis type="number" hide />
-                                <YAxis type="category" dataKey="name" stroke="#9ca3af" width={80} axisLine={false} tickLine={false} />
-                                <Tooltip cursor={{fill: 'rgba(255,255,255,0.1)'}} contentStyle={{ backgroundColor: '#1a202c', border: '1px solid #4A5568', borderRadius: '0.5rem' }}/>
-                                <Bar dataKey="value" barSize={20}>
-                                    {peData.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={entry.color} />
-                                    ))}
-                                </Bar>
-                            </BarChart>
-                        </ResponsiveContainer>
+
+                {/* Sidebar */}
+                <div className="lg:col-span-1 space-y-6">
+                    <div className="bg-deep-indigo/50 p-4 rounded-lg h-48 flex flex-col">
+                        <h3 className="text-electric-mint font-semibold mb-2">Real-Time Sentiment</h3>
+                        {isLoading ? <div className="flex-grow flex items-center justify-center text-gray-400 text-sm">Analyzing...</div> 
+                          : sentimentError ? <div className="flex-grow flex items-center justify-center text-red-400 text-sm">{sentimentError}</div> 
+                          : sentimentResult && <SentimentGauge score={sentimentResult.score} />}
                     </div>
+                    
+                    <NewsSection articles={news} isLoading={isLoading} error={newsError} />
                 </div>
             </div>
         </GlassCard>

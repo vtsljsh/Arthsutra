@@ -1,18 +1,13 @@
 
 import { GoogleGenAI, GenerateContentResponse, Type } from '@google/genai';
-import type { Stock, Sector, AlphaAdvice, SentimentResult, GroundingChunk } from '../types';
+import type { Stock, Sector, AlphaAdvice, SentimentResult, GroundingChunk, NewsArticle } from '../types';
 
-const API_KEY = process.env.API_KEY;
-
-if (!API_KEY) {
-  console.warn("Gemini API Key not found. AI features will be disabled.");
-}
-
-const ai = new GoogleGenAI({ apiKey: API_KEY });
+// FIX: Per coding guidelines, initialize GoogleGenAI directly with `process.env.API_KEY`.
+// The API key is assumed to be available in the execution environment.
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export const getAlphaAdvice = async (topGainers: Stock[], topLosers: Stock[], sectors: Sector[]): Promise<AlphaAdvice | string> => {
-    if (!API_KEY) return "API Key not configured. Cannot generate advice.";
-    
+    // FIX: Removed redundant API key check as the app assumes the key is configured.
     const prompt = `
         You are Arthasutra, a world-class Indian equity strategist. Your advice is sharp, data-driven, and adheres to strict risk management.
         Analyze the following market data:
@@ -74,12 +69,13 @@ export const getAlphaAdvice = async (topGainers: Stock[], topLosers: Stock[], se
 };
 
 export const getStockSentiment = async (stock: Stock): Promise<SentimentResult | string> => {
-    if (!API_KEY) return "Sentiment analysis unavailable.";
-
+    // FIX: Removed redundant API key check as the app assumes the key is configured.
     const prompt = `
         Analyze the latest real-time news and financial data for the Indian stock: ${stock.name} (${stock.ticker}).
-        Provide a concise, 1-sentence 'Sentiment Score' summarizing the current market feeling about this stock.
-        Just give me the single sentence sentiment score. Do not explain your reasoning.
+        Respond in JSON format with two keys:
+        1. "sentiment": A concise, 1-sentence summary of the current market feeling.
+        2. "score": A numerical score from -1.0 (very bearish) to 1.0 (very bullish).
+        Your response MUST be a valid JSON object.
     `;
 
     try {
@@ -88,12 +84,19 @@ export const getStockSentiment = async (stock: Stock): Promise<SentimentResult |
             contents: prompt,
             config: {
                 tools: [{googleSearch: {}}],
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        sentiment: { type: Type.STRING },
+                        score: { type: Type.NUMBER },
+                    },
+                    required: ["sentiment", "score"],
+                }
             },
         });
         
-        const sentiment = response.text;
-        // FIX: The Gemini API GroundingChunk type has optional properties, while our internal type is stricter.
-        // We filter and map the API response to conform to our internal `GroundingChunk` type.
+        const parsedResult = JSON.parse(response.text);
         const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
 
         const sources: GroundingChunk[] = groundingChunks
@@ -101,14 +104,49 @@ export const getStockSentiment = async (stock: Stock): Promise<SentimentResult |
             .map(chunk => ({
                 web: {
                     uri: chunk.web.uri!,
-                    title: chunk.web.title || chunk.web.uri!, // Use URI as a fallback for title
+                    title: chunk.web.title || chunk.web.uri!,
                 }
             }));
 
-
-        return { sentiment, sources };
+        return { ...parsedResult, sources };
     } catch (error) {
         console.error("Error fetching stock sentiment from Gemini:", error);
         return "Could not analyze sentiment at this time.";
+    }
+};
+
+export const getNewsForStock = async (stock: Stock): Promise<NewsArticle[] | string> => {
+    // FIX: Removed redundant API key check as the app assumes the key is configured.
+    const prompt = `
+        Fetch the 5 most recent and relevant financial news headlines for the Indian stock: ${stock.name} (${stock.ticker}).
+        For each headline, provide the title, the direct URL, and the source publication name.
+        Your response MUST be a valid JSON object, an array of articles.
+    `;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-3-flash-preview",
+            contents: prompt,
+            config: {
+                tools: [{ googleSearch: {} }],
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.ARRAY,
+                    items: {
+                        type: Type.OBJECT,
+                        properties: {
+                            title: { type: Type.STRING },
+                            url: { type: Type.STRING },
+                            source: { type: Type.STRING },
+                        },
+                        required: ["title", "url", "source"],
+                    }
+                }
+            },
+        });
+        return JSON.parse(response.text) as NewsArticle[];
+    } catch (error) {
+        console.error("Error fetching news from Gemini:", error);
+        return "Could not fetch news at this time.";
     }
 };
